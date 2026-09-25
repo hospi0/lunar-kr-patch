@@ -5,7 +5,7 @@ r"""마법학원 루나! 한글 빌더 (1차: 8×8 반각 이름·장 제목 카
   3) CHAPTER.FLD ← tools/chapter_kr.py (장 제목 글씨 시트 LZSS 되압축).
   ⇒ Track 01 사본에 파일 크기 그대로 덮어쓰고 바뀐 섹터만 EDC/ECC 재계산 → work/out/
   (대사·KANJI.FNT 는 본문 번역이 오면 붙인다)
-  python tools/build.py [--write]   (기본 = 예행)
+  python tools/build.py [--write [--install]]   (기본 = 예행 · --install = F: 트랙 1 교체)
 """
 import collections, hashlib, os, re, shutil, sys
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
@@ -17,6 +17,7 @@ import scr, bdf, chapter_kr, kr16
 GALMURI7 = r'C:\claude\utils\font\Galmuri-v2.40.3\Galmuri7.bdf'
 HALF_CODES = list(range(0x80, 0xFE))          # 한글 8×8 칸(0xFE·0xFF 는 피함)
 OUT = os.path.join(ROOT, 'work', 'out')
+INSTALL = r'F:\hospi\roms\ss roms\Mahou Gakuen Lunar! (Japan) (2M)\Mahou Gakuen Lunar! (Japan) (2M) (Track 01).bin'   # --install
 
 
 def load_half():
@@ -144,6 +145,9 @@ def main():
                     fh.write(recalc_sector(bytes(sec)))
     h = hashlib.md5(open(out, 'rb').read()).hexdigest().upper()
     print('완료', out, 'md5', h)
+    if '--install' in sys.argv:
+        shutil.copyfile(out, INSTALL)
+        print('설치', INSTALL)
 
 
 if __name__ == '__main__':
