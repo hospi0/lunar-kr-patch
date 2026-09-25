@@ -15,7 +15,7 @@ from cdrom_ecc import recalc_sector
 import scr, bdf, chapter_kr, kr16
 
 GALMURI7 = r'C:\claude\utils\font\Galmuri-v2.40.3\Galmuri7.bdf'
-ENCOUNTER_THIRD = True                           # 조우율 1/3 (끄려면 False)
+ENCOUNTER_THIRD = False                          # 기본 = 원본 조우율. 배포 때 --enc third / --enc never 로 xdelta 3종(원본·1/3·없음) — 사용자 결정 2026-09-26
 HALF_CODES = list(range(0x80, 0xFE))          # 한글 8×8 칸(0xFE·0xFF 는 피함)
 OUT = os.path.join(ROOT, 'work', 'out')
 INSTALL = r'F:\hospi\roms\ss roms\Mahou Gakuen Lunar! (Japan) (2M)\Mahou Gakuen Lunar! (Japan) (2M) (Track 01).bin'   # --install
