@@ -5,7 +5,7 @@ r"""번역(KO) 검사 — work/text/scr.tsv · ui.tsv
    · 한 줄 ≤ 16칸(원문에 더 긴 줄이 있으면 그 길이까지. 전각 기준, 한글·부호·빈칸 모두 1칸), 쪽({0c} 사이) 줄 수 ≤ JP 의 같은 쪽 줄 수(최소 3)
    · 글자: 한글 음절 + JP 에 쓰인 부호만. ♥ = KANJI.FNT 9E42(曖) 자리 그림
   UI:
-   · W(전각) = 예산 바이트 ≥ 2×글자 수, H(반각 8×8) = 예산 ≥ 글자 수(1바이트 칸)
+   · W(전각) = 예산 바이트 ≥ 2×글자 수(ASCII·\n 은 1), H(반각 8×8) = 예산 ≥ 글자 수(1바이트 칸). «=» 는 원문 그대로
   python tools/kocheck.py [S03 ...]      # 접두사로 거르기, 끝에 진행률·한글 음절 수
 """
 import os, re, sys, collections
@@ -71,8 +71,10 @@ def check_ui():
         if not ko:
             continue
         done += 1
-        body = re.sub(r'\{..\}', '', ko)
-        n = len(re.findall(r'\{..\}', ko)) + (2 if r[3] == 'W' else 1) * len(body)
+        if ko == '=':                               # 원문 그대로 둠(잡음·기호 등)
+            continue
+        body = re.sub(r'\{..\}', '', ko).replace('\\n', '\n')
+        n = len(re.findall(r'\{..\}', ko)) + sum(1 if (r[3] == 'H' or ord(ch) < 0x80) else 2 for ch in body)   # W 라도 ASCII(%3d·\n 등)는 1바이트
         if n > int(r[2]):
             bad.append((r[0], '%s 예산 %s < %d: %s' % (r[1], r[2], n, ko)))
     return bad, done, tot
@@ -89,6 +91,11 @@ def syllables():
     return s
 
 
+def syllables_h():
+    """8×8 반각(H) 문자열에 쓰인 한글 음절 — 1바이트 칸(약 128 + 빈 칸) 안에 들어가야 한다"""
+    return set(ch for r in load('ui.tsv') if len(r) > 5 and r[3] == 'H' for ch in r[5] if '가' <= ch <= '힣')
+
+
 if __name__ == '__main__':
     sys.stdout.reconfigure(encoding='utf-8')
     pref = sys.argv[1:]
@@ -96,4 +103,4 @@ if __name__ == '__main__':
     b2, d2, t2 = check_ui() if not pref else ([], 0, 0)
     for k, m in b1 + b2:
         print(k, m)
-    print('대사 %d/%d · UI %d/%d · 오류 %d · 한글 음절 %d' % (d1, t1, d2, t2, len(b1 + b2), len(syllables())))
+    print('대사 %d/%d · UI %d/%d · 오류 %d · 한글 음절 %d · 반각 음절 %d' % (d1, t1, d2, t2, len(b1 + b2), len(syllables()), len(syllables_h())))
