@@ -30,6 +30,61 @@ def decompress(src, n=None):
     return bytes(out)
 
 
+def compress(data):
+    """되압축(링 초기값 0x00). ★디코더처럼 «방금 쓴 바이트»를 다시 읽는 자기참조 런까지 흉내낸다(건그리폰 II 교훈)."""
+    ring = bytearray(4096)
+    r = 0xFEE
+    out = bytearray()
+    i = 0
+    # 빠른 후보 찾기: 3바이트 머리 → 링 위치 목록
+    heads = {}
+    while i < len(data):
+        flags, chunk = 0, bytearray()
+        for bit in range(8):
+            if i >= len(data):
+                break
+            best_len, best_pos = 0, 0
+            maxlen = min(18, len(data) - i)
+            if maxlen >= 3:
+                cands = heads.get(bytes(data[i:i + 3]), [])
+                # 초기 링(0x00)도 후보: 0 줄은 링 어디서나 맞는다
+                if data[i:i + 3] == b'\x00\x00\x00':
+                    cands = cands + [(r + 1) & 0xFFF]
+                for pos in reversed(cands[-64:]):
+                    tmp = {}
+                    k = 0
+                    while k < maxlen:
+                        s = (pos + k) & 0xFFF
+                        cc = tmp.get(s, ring[s])
+                        if cc != data[i + k]:
+                            break
+                        tmp[(r + k) & 0xFFF] = data[i + k]
+                        k += 1
+                    # 링에서 4096 이상 멀어진 위치는 이미 덮였을 수 있다 — 위에서 실제 링 값으로 비교하므로 안전
+                    if k > best_len:
+                        best_len, best_pos = k, pos
+                        if k == maxlen:
+                            break
+            if best_len >= 3:
+                chunk += bytes([best_pos & 0xFF, ((best_pos >> 4) & 0xF0) | (best_len - 3)])
+                n = best_len
+            else:
+                flags |= 1 << bit
+                chunk.append(data[i])
+                n = 1
+            for k in range(n):
+                if i + k + 3 <= len(data):
+                    pass
+                ring[r] = data[i + k]
+                if i + k >= 2:
+                    heads.setdefault(bytes(data[i + k - 2:i + k + 1]), []).append((r - 2) & 0xFFF)
+                r = (r + 1) & 0xFFF
+            i += n
+        out.append(flags)
+        out += chunk
+    return bytes(out)
+
+
 def block(buf, off=0):
     """[u32 BE 길이][데이터] 블록 풀기"""
     n = int.from_bytes(buf[off:off + 4], 'big')
