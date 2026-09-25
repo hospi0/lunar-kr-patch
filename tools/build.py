@@ -47,6 +47,31 @@ def load_scr():
     return tr
 
 
+EXTRA_UI = [('/1', 103204, 12, '取得アイテム')]     # 코드 사이에 박혀 ui.tsv 추출에서 빠진 것(앞이 NUL 아님)
+
+
+def load_ui():
+    """실행 파일 전각 UI 번역: work/text/ui_ko_poc.tsv (JP \t KO) — 같은 JP 는 모든 자리"""
+    tr = {}
+    for fn in (os.path.join(ROOT, 'work', 'text', 'ui_ko_poc.tsv'),):
+        if os.path.exists(fn):
+            for ln in open(fn, encoding='utf-8'):
+                if ln.startswith('#') or not ln.strip():
+                    continue
+                jp, ko = ln.rstrip('\n').split('\t')[:2]
+                tr[jp] = ko
+    return tr
+
+
+def ui_rows():
+    for ln in open(os.path.join(ROOT, 'work', 'text', 'ui.tsv'), encoding='utf-8'):
+        if ln.startswith('#'):
+            continue
+        r = ln.rstrip('\n').split('\t')
+        p, off = r[1].split('@')
+        yield p, int(off), int(r[2]), r[3], r[4]
+
+
 def half_rows():
     for ln in open(os.path.join(ROOT, 'work', 'text', 'ui.tsv'), encoding='utf-8'):
         if ln.startswith('#'):
@@ -106,12 +131,30 @@ def main():
     freq = collections.Counter()
     for ln in open(os.path.join(ROOT, 'work', 'text', 'scr.tsv'), encoding='utf-8'):
         freq.update(ln.split('\t')[-1])
-    sy16 = sorted(set(c for v in scr_tr.values() for c in v if '가' <= c <= '힣'))
+    ui_tr = load_ui()
+    sy16 = sorted(set(c for v in list(scr_tr.values()) + list(ui_tr.values()) for c in v if '가' <= c <= '힣'))
     kfnt = file('/KANJI.FNT')
     m16 = kr16.assign(sy16, bytes(kfnt), freq)
     kr16.put_font(kfnt, m16)
     n_scr = kr16.rewrite_scripts(file, scr_tr, m16, err)
-    print('16×16 한글 %d자 · 대사 %d줄' % (len(sy16), n_scr))
+    # 실행 파일 전각 UI — ui.tsv 의 W 자리 + 목록 밖 자리(EXTRA_UI) 에 제자리
+    n_ui = 0
+    places = [(p, off, n, jp) for p, off, n, kind, jp in ui_rows() if kind == 'W'] + EXTRA_UI
+    for p, off, n, jp in places:
+        lead = re.match(r'(\{[0-9a-f]{2}\})*', jp).group()
+        core = jp[len(lead):]
+        if core not in ui_tr:
+            continue
+        d = file(p)
+        head = bytes(int(x, 16) for x in re.findall(r'\{([0-9a-f]{2})\}', lead))
+        if bytes(d[off:off + n]) != head + core.encode('cp932') or d[off + n] != 0:
+            err.append('%s@%d UI 원문 불일치 %s' % (p, off, jp)); continue
+        b = head + kr16.encode(ui_tr[core], m16)
+        if len(b) > n:
+            err.append('%s@%d UI 예산 %d < %d: %s' % (p, off, n, len(b), ui_tr[core])); continue
+        d[off:off + n] = b + bytes(n - len(b))
+        n_ui += 1
+    print('16×16 한글 %d자 · 대사 %d줄 · UI %d곳' % (len(sy16), n_scr, n_ui))
     # --- 3) 장 제목 카드 ----------------------------------------------------
     chap, _, clen = chapter_kr.build()
     d = file('/CHAPTER.FLD')
