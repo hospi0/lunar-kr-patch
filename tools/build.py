@@ -170,13 +170,18 @@ def main():
     # --- 2.8) 조우율 1/3 (사용자 요청 2026-09-26) ----------------------------------
     #   /1 0x06018338‥: 카운터(0x06052844) = 난수(r4=6) + 5 → 걸음마다 −1, 0 이면 전투(0x0602909C). 평균 약 8걸음.
     #   난수 범위 6→18, 더하기 5→15 → 15‥33걸음(평균 약 24) = 약 1/3.
-    if ENCOUNTER_THIRD:
+    #   실험: --enc always = 매 걸음 전투(카운터 = 난수(0)+0 = 0) · --enc never = 전투 없음(감소 −1 → 0, /1@69798 71FF→7100)
+    enc = sys.argv[sys.argv.index('--enc') + 1] if '--enc' in sys.argv else ('third' if ENCOUNTER_THIRD else None)
+    ENC = {'third': ((830, 'e406', 'e414'), (834, '7105', '7113')),     # 난수(0‥20)+19 — 구역 조건(약 2.5걸음) 포함 원래 ≈10.5 → ≈31.5걸음
+           'always': ((830, 'e406', 'e400'), (834, '7105', '7100')),
+           'never': ((69798, '71ff', '7100'),)}
+    if enc:
         d = file('/1')
-        for off, old, new in ((830, b'\xe4\x06', b'\xe4\x12'), (834, b'\x71\x05', b'\x71\x0f')):
-            if bytes(d[off:off + 2]) != old:
+        for off, old, new in ENC[enc]:
+            if bytes(d[off:off + 2]) != bytes.fromhex(old):
                 err.append('/1@%d 조우 코드 원문 불일치' % off); continue
-            d[off:off + 2] = new
-        print('조우율 1/3 패치')
+            d[off:off + 2] = bytes.fromhex(new)
+        print('조우 패치:', enc)
     # --- 3) 장 제목 카드 ----------------------------------------------------
     chap, _, clen = chapter_kr.build()
     d = file('/CHAPTER.FLD')
