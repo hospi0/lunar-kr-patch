@@ -21,77 +21,62 @@ OUT = os.path.join(ROOT, 'work', 'out')
 INSTALL = r'F:\hospi\roms\ss roms\Mahou Gakuen Lunar! (Japan) (2M)\Mahou Gakuen Lunar! (Japan) (2M) (Track 01).bin'   # --install
 
 
-def load_half():
-    tr = {}
-    for ln in open(os.path.join(ROOT, 'work', 'text', 'half_ko.tsv'), encoding='utf-8'):
-        if ln.startswith('#') or not ln.strip():
-            continue
-        jp, ko = ln.rstrip('\n').split('\t')[:2]
-        tr[jp] = ko
-    return tr
+def dlg_fix(ko):
+    """대사 KO 빌드 전 손질: 반각 !·? → 전각(규칙 문서 — 반각은 대사창에서 8×8 로 나올 수 있다). 반각 빈칸은 그대로(원문도 씀)."""
+    return ko.replace('!', '！').replace('?', '？')
 
 
 def load_scr():
-    """대사 번역: work/text/scr_ko_poc.tsv + work/ko/*.tsv (번호 \t KO …) — 뒤 파일이 이긴다"""
+    """대사 번역: work/text/scr.tsv 4열 KO + work/ko/*.tsv(번호 \t … \t KO) 덧씌움. 빈칸·«=»(원문 그대로)는 건너뜀."""
     import glob
     tr = {}
-    files = [os.path.join(ROOT, 'work', 'text', 'scr_ko_poc.tsv')] + sorted(glob.glob(os.path.join(ROOT, 'work', 'ko', '*.tsv')))
-    for fn in files:
-        if not os.path.exists(fn):
-            continue
+    for ln in open(os.path.join(ROOT, 'work', 'text', 'scr.tsv'), encoding='utf-8'):
+        r = ln.rstrip('\n').split('\t')
+        if len(r) >= 4 and not r[0].startswith('#') and r[3] and r[3] != '=':
+            tr[r[0]] = dlg_fix(r[3])
+    for fn in sorted(glob.glob(os.path.join(ROOT, 'work', 'ko', '*.tsv'))):
         for ln in open(fn, encoding='utf-8'):
-            if ln.startswith('#') or not ln.strip():
-                continue
             r = ln.rstrip('\n').split('\t')
-            if len(r) >= 2 and re.match(r'S\d\d:\d+:\d+$', r[0]) and r[-1] and r[-1] != r[0]:
-                tr[r[0]] = r[-1]
+            if len(r) >= 2 and re.match(r'S\d\d:\d+:\d+$', r[0]) and r[-1] and r[-1] not in (r[0], '='):
+                tr[r[0]] = dlg_fix(r[-1])
     return tr
 
 
-def extra_ui():
-    """work/text/ui_extra.tsv — ui.tsv 에서 빠졌던 것(앞 바이트가 NUL 아님, tools/exestr2.py)"""
-    fn = os.path.join(ROOT, 'work', 'text', 'ui_extra.tsv')
+def ui_table():
+    """실행 파일 문자열 번역 — (파일, 위치, 예산, 종류 W/H, JP, KO). ui.tsv(6열) + ui_extra.tsv(위치·예산·JP·KO, 종류 W).
+       KO 가 비었거나 «=» 면 원문 그대로."""
     out = []
+    for ln in open(os.path.join(ROOT, 'work', 'text', 'ui.tsv'), encoding='utf-8'):
+        if ln.startswith('#'):
+            continue
+        r = ln.rstrip('\n').split('\t')
+        p, off = r[1].split('@')
+        ko = r[5] if len(r) > 5 else ''
+        out.append((p, int(off), int(r[2]), r[3], r[4], ko))
+    fn = os.path.join(ROOT, 'work', 'text', 'ui_extra.tsv')
     if os.path.exists(fn):
         for ln in open(fn, encoding='utf-8'):
             if ln.startswith('#') or not ln.strip():
                 continue
             r = ln.rstrip('\n').split('\t')
             p, off = r[0].split('@')
-            out.append((p, int(off), int(r[1]), r[2]))
-    return out
+            out.append((p, int(off), int(r[1]), 'W', r[2], r[3] if len(r) > 3 else ''))
+    return [x for x in out if x[5] and x[5] != '=']
 
 
-def load_ui():
-    """실행 파일 전각 UI 번역: work/text/ui_ko_poc.tsv (JP \t KO) — 같은 JP 는 모든 자리"""
-    tr = {}
-    for fn in (os.path.join(ROOT, 'work', 'text', 'ui_ko_poc.tsv'),):
-        if os.path.exists(fn):
-            for ln in open(fn, encoding='utf-8'):
-                if ln.startswith('#') or not ln.strip():
-                    continue
-                jp, ko = ln.rstrip('\n').split('\t')[:2]
-                tr[jp] = ko
-    return tr
-
-
-def ui_rows():
-    for ln in open(os.path.join(ROOT, 'work', 'text', 'ui.tsv'), encoding='utf-8'):
-        if ln.startswith('#'):
+def jp_bytes(jp):
+    """표기(JP) → 원본 바이트({xx} 제어, \n, cp932)"""
+    out = bytearray()
+    for tok in re.split(r'(\{[0-9a-f]{2}\}|\\n)', jp):
+        if not tok:
             continue
-        r = ln.rstrip('\n').split('\t')
-        p, off = r[1].split('@')
-        yield p, int(off), int(r[2]), r[3], r[4]
-
-
-def half_rows():
-    for ln in open(os.path.join(ROOT, 'work', 'text', 'ui.tsv'), encoding='utf-8'):
-        if ln.startswith('#'):
-            continue
-        r = ln.rstrip('\n').split('\t')
-        if r[3] == 'H':
-            p, off = r[1].split('@')
-            yield p, int(off), int(r[2]), r[4]
+        if tok == '\\n':
+            out.append(0x0A)
+        elif re.fullmatch(r'\{[0-9a-f]{2}\}', tok):
+            out.append(int(tok[1:3], 16))
+        else:
+            out += tok.encode('cp932')
+    return bytes(out)
 
 
 def main():
@@ -106,9 +91,9 @@ def main():
         return data[p]
 
     err = []
+    uit = ui_table()
     # --- 1) 8×8 한글 --------------------------------------------------------
-    tr = load_half()
-    sylls = sorted(set(c for k in tr.values() for c in k if '가' <= c <= '힣'))
+    sylls = sorted(set(c for x in uit if x[3] == 'H' for c in x[5] if '가' <= c <= '힣'))
     assert len(sylls) <= len(HALF_CODES), ('8×8 칸 부족', len(sylls), len(HALF_CODES))
     code = dict(zip(sylls, HALF_CODES))
     F = bdf.Font(GALMURI7)
@@ -127,15 +112,15 @@ def main():
 
     # --- 2) 반각 이름 제자리 ------------------------------------------------
     nh = 0
-    for p, off, n, jp in half_rows():
-        if jp not in tr:
-            continue                               # 코드 잡음(2자 등)은 번역표에 없다
+    for p, off, n, kind, jp, ko in uit:
+        if kind != 'H':
+            continue
         d = file(p)
-        if bytes(d[off:off + n]).decode('cp932') != jp or d[off + n] != 0:
+        if bytes(d[off:off + n]) != jp_bytes(jp) or d[off + n] != 0:
             err.append('%s@%d 원문 불일치 %s' % (p, off, jp)); continue
-        b = enc(tr[jp])
+        b = enc(ko)
         if len(b) > n:
-            err.append('%s@%d 예산 %d < %d: %s' % (p, off, n, len(b), tr[jp])); continue
+            err.append('%s@%d 예산 %d < %d: %s' % (p, off, n, len(b), ko)); continue
         d[off:off + n] = b + bytes(n - len(b))
         nh += 1
     # --- 2.5) 본문 16×16 한글 + 대사 블록 --------------------------------------
@@ -143,27 +128,23 @@ def main():
     freq = collections.Counter()
     for ln in open(os.path.join(ROOT, 'work', 'text', 'scr.tsv'), encoding='utf-8'):
         freq.update(ln.split('\t')[-1])
-    ui_tr = load_ui()
-    sy16 = sorted(set(c for v in list(scr_tr.values()) + list(ui_tr.values()) for c in v if '가' <= c <= '힣'))
+    wko = [x[5] for x in uit if x[3] == 'W']
+    sy16 = sorted(set(c for v in list(scr_tr.values()) + wko for c in v if '가' <= c <= '힣'))
     kfnt = file('/KANJI.FNT')
     m16 = kr16.assign(sy16, bytes(kfnt), freq)
     kr16.put_font(kfnt, m16)
     n_scr = kr16.rewrite_scripts(file, scr_tr, m16, err)
-    # 실행 파일 전각 UI — ui.tsv 의 W 자리 + 목록 밖 자리(EXTRA_UI) 에 제자리
+    # 실행 파일 전각 UI — ui.tsv(W) + ui_extra.tsv 자리에 제자리(KO 의 {09} 등 제어 바이트는 KO 에 적힌 그대로)
     n_ui = 0
-    places = [(p, off, n, jp) for p, off, n, kind, jp in ui_rows() if kind == 'W'] + extra_ui()
-    for p, off, n, jp in places:
-        lead = re.match(r'(\{[0-9a-f]{2}\})*', jp).group()
-        core = jp[len(lead):]
-        if core not in ui_tr:
+    for p, off, n, kind, jp, ko in uit:
+        if kind != 'W':
             continue
         d = file(p)
-        head = bytes(int(x, 16) for x in re.findall(r'\{([0-9a-f]{2})\}', lead))
-        if bytes(d[off:off + n]) != head + core.encode('cp932') or d[off + n] != 0:
+        if bytes(d[off:off + n]) != jp_bytes(jp) or d[off + n] != 0:
             err.append('%s@%d UI 원문 불일치 %s' % (p, off, jp)); continue
-        b = head + kr16.encode(ui_tr[core], m16)
+        b = kr16.encode(ko, m16)
         if len(b) > n:
-            err.append('%s@%d UI 예산 %d < %d: %s' % (p, off, n, len(b), ui_tr[core])); continue
+            err.append('%s@%d UI 예산 %d < %d: %s' % (p, off, n, len(b), ko)); continue
         d[off:off + n] = b + bytes(n - len(b))
         n_ui += 1
     print('16×16 한글 %d자 · 대사 %d줄 · UI %d곳' % (len(sy16), n_scr, n_ui))

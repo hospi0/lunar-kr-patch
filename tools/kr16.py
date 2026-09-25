@@ -81,6 +81,8 @@ def encode(ko, m):
         if mm:
             out.append(int(mm.group(1), 16)); i += 4; continue
         ch = ko[i]
+        if ch == '♥':
+            ch = '曖'                        # ♥ = 원문 曖(9E42) 자리에 그린 하트
         if ch in m:
             out += m[ch]
         elif ord(ch) < 0x80:
