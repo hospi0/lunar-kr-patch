@@ -15,6 +15,7 @@ from cdrom_ecc import recalc_sector
 import scr, bdf, chapter_kr, kr16
 
 GALMURI7 = r'C:\claude\utils\font\Galmuri-v2.40.3\Galmuri7.bdf'
+ENCOUNTER_THIRD = True                           # 조우율 1/3 (끄려면 False)
 HALF_CODES = list(range(0x80, 0xFE))          # 한글 8×8 칸(0xFE·0xFF 는 피함)
 OUT = os.path.join(ROOT, 'work', 'out')
 INSTALL = r'F:\hospi\roms\ss roms\Mahou Gakuen Lunar! (Japan) (2M)\Mahou Gakuen Lunar! (Japan) (2M) (Track 01).bin'   # --install
@@ -166,6 +167,16 @@ def main():
         d[off:off + n] = b + bytes(n - len(b))
         n_ui += 1
     print('16×16 한글 %d자 · 대사 %d줄 · UI %d곳' % (len(sy16), n_scr, n_ui))
+    # --- 2.8) 조우율 1/3 (사용자 요청 2026-09-26) ----------------------------------
+    #   /1 0x06018338‥: 카운터(0x06052844) = 난수(r4=6) + 5 → 걸음마다 −1, 0 이면 전투(0x0602909C). 평균 약 8걸음.
+    #   난수 범위 6→18, 더하기 5→15 → 15‥33걸음(평균 약 24) = 약 1/3.
+    if ENCOUNTER_THIRD:
+        d = file('/1')
+        for off, old, new in ((830, b'\xe4\x06', b'\xe4\x12'), (834, b'\x71\x05', b'\x71\x0f')):
+            if bytes(d[off:off + 2]) != old:
+                err.append('/1@%d 조우 코드 원문 불일치' % off); continue
+            d[off:off + 2] = new
+        print('조우율 1/3 패치')
     # --- 3) 장 제목 카드 ----------------------------------------------------
     chap, _, clen = chapter_kr.build()
     d = file('/CHAPTER.FLD')
