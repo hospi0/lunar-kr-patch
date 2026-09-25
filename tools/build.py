@@ -47,7 +47,18 @@ def load_scr():
     return tr
 
 
-EXTRA_UI = [('/1', 103204, 12, '取得アイテム')]     # 코드 사이에 박혀 ui.tsv 추출에서 빠진 것(앞이 NUL 아님)
+def extra_ui():
+    """work/text/ui_extra.tsv — ui.tsv 에서 빠졌던 것(앞 바이트가 NUL 아님, tools/exestr2.py)"""
+    fn = os.path.join(ROOT, 'work', 'text', 'ui_extra.tsv')
+    out = []
+    if os.path.exists(fn):
+        for ln in open(fn, encoding='utf-8'):
+            if ln.startswith('#') or not ln.strip():
+                continue
+            r = ln.rstrip('\n').split('\t')
+            p, off = r[0].split('@')
+            out.append((p, int(off), int(r[1]), r[2]))
+    return out
 
 
 def load_ui():
@@ -139,7 +150,7 @@ def main():
     n_scr = kr16.rewrite_scripts(file, scr_tr, m16, err)
     # 실행 파일 전각 UI — ui.tsv 의 W 자리 + 목록 밖 자리(EXTRA_UI) 에 제자리
     n_ui = 0
-    places = [(p, off, n, jp) for p, off, n, kind, jp in ui_rows() if kind == 'W'] + EXTRA_UI
+    places = [(p, off, n, jp) for p, off, n, kind, jp in ui_rows() if kind == 'W'] + extra_ui()
     for p, off, n, jp in places:
         lead = re.match(r'(\{[0-9a-f]{2}\})*', jp).group()
         core = jp[len(lead):]
