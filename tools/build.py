@@ -15,7 +15,7 @@ from cdrom_ecc import recalc_sector
 import scr, bdf, chapter_kr, kr16
 
 GALMURI7 = r'C:\claude\utils\font\Galmuri-v2.40.3\Galmuri7.bdf'
-ENCOUNTER_THIRD = False                          # 기본 = 원본 조우율. 배포 때 --enc third / --enc never 로 xdelta 3종(원본·1/3·없음) — 사용자 결정 2026-09-26
+ENCOUNTER_THIRD = False                          # 기본 = 원본 조우율. 배포 때 --enc fifth / --enc never 로 xdelta 3종(원본·1/5·없음) — 사용자 결정 2026-09-26
 HALF_CODES = list(range(0x80, 0xFE))          # 한글 8×8 칸(0xFE·0xFF 는 피함)
 OUT = os.path.join(ROOT, 'work', 'out')
 INSTALL = r'F:\hospi\roms\ss roms\Mahou Gakuen Lunar! (Japan) (2M)\Mahou Gakuen Lunar! (Japan) (2M) (Track 01).bin'   # --install
@@ -171,8 +171,8 @@ def main():
     #   /1 0x06018338‥: 카운터(0x06052844) = 난수(r4=6) + 5 → 걸음마다 −1, 0 이면 전투(0x0602909C). 평균 약 8걸음.
     #   난수 범위 6→18, 더하기 5→15 → 15‥33걸음(평균 약 24) = 약 1/3.
     #   실험: --enc always = 매 걸음 전투(카운터 = 난수(0)+0 = 0) · --enc never = 전투 없음(감소 −1 → 0, /1@69798 71FF→7100)
-    enc = sys.argv[sys.argv.index('--enc') + 1] if '--enc' in sys.argv else ('third' if ENCOUNTER_THIRD else None)
-    ENC = {'third': ((830, 'e406', 'e414'), (834, '7105', '7113')),     # 난수(0‥20)+19 — 구역 조건(약 2.5걸음) 포함 원래 ≈10.5 → ≈31.5걸음
+    enc = sys.argv[sys.argv.index('--enc') + 1] if '--enc' in sys.argv else ('fifth' if ENCOUNTER_THIRD else None)
+    ENC = {'fifth': ((830, 'e406', 'e422'), (834, '7105', '7121')),     # 난수(0‥34)+33 — 칸 조건(약 2.5걸음) 포함 원래 ≈10.5 → ≈52.5걸음(1/5, 사용자 2026-09-26)
            'always': ((830, 'e406', 'e400'), (834, '7105', '7100')),
            'never': ((69798, '71ff', '7100'),)}
     if enc:
