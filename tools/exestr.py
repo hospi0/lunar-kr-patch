@@ -66,10 +66,18 @@ def extract():
 if __name__ == '__main__':
     sys.stdout.reconfigure(encoding='utf-8')
     rows = extract()
-    with open(os.path.join(ROOT, 'work', 'text', 'ui.tsv'), 'w', encoding='utf-8') as f:
+    out = os.path.join(ROOT, 'work', 'text', 'ui.tsv')
+    ko = {}                                             # 다시 뽑아도 번역(KO)은 (위치, JP) 가 같으면 살린다
+    if os.path.exists(out):
+        for l in open(out, encoding='utf-8'):
+            c = l.rstrip('\n').split('\t')
+            if len(c) >= 6 and not c[0].startswith('#'):
+                ko[(c[1], c[4])] = c[5]
+    with open(out, 'w', encoding='utf-8') as f:
         f.write('#번호\t위치\t예산\t종류\tJP\tKO\n')
         for k, (p, o, n, kind, s) in enumerate(rows):
-            f.write('%d\t%s@%d\t%d\t%s\t%s\t\n' % (k, p, o, n, kind, s))
+            w = '%s@%d' % (p, o)
+            f.write('%d\t%s\t%d\t%s\t%s\t%s\n' % (k, w, n, kind, s, ko.get((w, s), '')))
     import collections
     c = collections.Counter((r[0], r[3]) for r in rows)
     print('UI 문자열 %d' % len(rows), dict(c))
