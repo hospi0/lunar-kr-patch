@@ -98,10 +98,17 @@ if __name__ == '__main__':
             b = d[o + e[i]:o + e[i + 1] - 1]          # 끝 NUL 만 뺀다({08} 대기는 대사 안에 남김)
             rows.append(('%s:%d:%d' % (p[1:4], si, i), len(b), esc(b)))
     os.makedirs(os.path.join(ROOT, 'work', 'text'), exist_ok=True)
-    with open(os.path.join(ROOT, 'work', 'text', 'scr.tsv'), 'w', encoding='utf-8') as f:
-        f.write('#번호\t바이트\tJP\n')
+    out = os.path.join(ROOT, 'work', 'text', 'scr.tsv')
+    ko = {}                                             # 다시 뽑아도 번역(KO)은 (번호, JP) 가 같으면 살린다
+    if os.path.exists(out):
+        for l in open(out, encoding='utf-8'):
+            c = l.rstrip('\n').split('\t')
+            if len(c) >= 4 and not c[0].startswith('#'):
+                ko[(c[0], c[2])] = c[3]
+    with open(out, 'w', encoding='utf-8') as f:
+        f.write('#번호\t바이트\tJP\tKO\n')
         for r in rows:
-            f.write('%s\t%d\t%s\n' % r)
+            f.write('%s\t%d\t%s\t%s\n' % (r + (ko.get((r[0], r[2]), ''),)))
     print('대사 %d줄 · 표 없는 구역 %d' % (len(rows), len(miss)))
     for m in miss:
         print('  표 없음', *m)
