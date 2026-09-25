@@ -12,7 +12,7 @@ import os, re, sys, collections
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 TXT = os.path.join(ROOT, 'work', 'text')
 WIDTH = 16
-PUNCT = set('　 ！？…‥、。・「」『』（）～ー―－―：；“”’ ♪♥●○×☆★／※＋＝％＆＊０１２３４５６７８９!?.,-~') | set(chr(c) for c in range(0xFF21, 0xFF3B))   # 전각 Ａ‥Ｚ
+PUNCT = set('　 ！？…‥、。・「」『』（）～ー―－―：；“”’ ♪♥●○×☆★／※＋＝％＆＊０１２３４５６７８９!?.,-~') | set(chr(c) for c in range(0xFF21, 0xFF3B)) | set(chr(c) for c in range(0xFF41, 0xFF5B))   # 전각 Ａ‥Ｚ ａ‥ｚ
 
 
 def load(name):
