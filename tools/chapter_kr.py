@@ -66,8 +66,12 @@ def build():
         x0, x1, y0, y1 = -(w // 2), w // 2 - 1, -(h // 2), h - h // 2 - 1
         struct.pack_into('>8h', d, o0 + k + 8, x0, y0, x1, y0, x0, y1, x1, y1)
     orig_sheet = chapter.sheet(src)
-    assert len(sheet) <= len(orig_sheet), ('시트가 원본보다 큼', len(sheet), len(orig_sheet))
-    sheet += bytes(len(orig_sheet) - len(sheet))
+    # ★시트 끝 32 B(0xC840) = 16색 색표(LUT). 기술자 첫 u32 의 아래 16비트 0x1908 = LUT 위치/8 (VDP1 colr = 슬롯 0x1000 + 0x1908).
+    #   0 으로 덮으면 글씨가 통째로 안 보인다(실기 2026-09-26). 조각은 LUT 앞에서 끝나야 한다.
+    lut_off = (struct.unpack_from('>I', src, o0 + 0x6C)[0] & 0xFFFF) * 8
+    assert len(sheet) <= lut_off, ('조각이 색표 자리를 덮음', len(sheet), lut_off)
+    sheet += bytes(lut_off - len(sheet))
+    sheet += orig_sheet[lut_off:]
     comp = lzss.compress(bytes(sheet))
     assert lzss.decompress(comp) == bytes(sheet), '왕복 불일치'
     o1, s1 = secs[1]
