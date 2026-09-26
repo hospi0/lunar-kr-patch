@@ -24,7 +24,10 @@ def font_codes(fnt):
 
 def donors(fnt, freq):
     codes, _ = font_codes(fnt)
-    c = [b for b in codes if b[0] >= 0x88 and b.decode('cp932', 'replace') not in KEEP]
+    # ★목록에 두 번 나오는 코드(81AC×4, 8B40, 8B70, 90C9, 927A)는 빌리지 않는다 — 게임은 첫 칸을 찾는데
+    #   어느 칸에 그릴지 갈린다(실기 2026-09-26 «튀어나昔»: 온 = 90C9 惜).
+    dup = {b for b in codes if codes.count(b) > 1}
+    c = [b for b in codes if b[0] >= 0x88 and b not in dup and b.decode('cp932', 'replace') not in KEEP]
     return sorted(c, key=lambda b: (freq[b.decode('cp932', 'replace')], b))
 
 
