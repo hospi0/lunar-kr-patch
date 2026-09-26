@@ -129,6 +129,10 @@ def rewrite_scripts(file, tr, m, err):
             err.append('%s 구역 %d 주소 표 없음' % (p, si)); continue
         n, tb, e = t
         virtual = (n == 1)
+        # ★표 마지막 항목도 대사인 구역(189곳): 끝 항목이 따로 없다 → 그 대사 끝을 가상 끝으로 붙이고 표엔 N 개만 쓴다
+        le = scr.last_msg_end(bytes(d), o, s, e) if n > 1 else None
+        if le:
+            e = e + [le]
         cnt = len(e) - 1
         old = [bytes(d[o + e[i]:o + e[i + 1]]) for i in range(cnt)]      # 끝 NUL 포함
         new = []
@@ -157,7 +161,8 @@ def rewrite_scripts(file, tr, m, err):
             struct.pack_into('>I', d, o + tb + 4 * i, pos)
             pos += len(new[i])
         if not virtual:
-            struct.pack_into('>I', d, o + tb + 4 * cnt, pos)          # 끝 항목 = 꼬리 시작
+            if not le:
+                struct.pack_into('>I', d, o + tb + 4 * cnt, pos)      # 끝 항목 = 꼬리 시작
             d[o + e[0]:o + total] = blk + tail
             if total < s:
                 d[o + total:o + s] = b'\xff' * (s - total)
@@ -173,6 +178,9 @@ def rewrite_scripts(file, tr, m, err):
         # 되읽기: 표로 다시 풀어 모든 대사가 기대대로인지
         s2 = struct.unpack_from('>I', d, [k for k in range(0, 0x800, 8) if struct.unpack_from('>I', d, k)[0] == o][0] + 4)[0]
         t2 = scr.find_table(bytes(d), o, s2 if not virtual else s)
+        if t2 and le:
+            le2 = scr.last_msg_end(bytes(d), o, s2, t2[2])
+            t2 = (t2[0], t2[1], t2[2] + [le2]) if le2 else None
         got = [bytes(d[o + t2[2][i]:o + t2[2][i + 1]]) for i in range(len(t2[2]) - 1)] if t2 else None
         if got != new:
             err.append('%s 구역 %d 되읽기 불일치' % (p, si))

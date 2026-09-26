@@ -51,6 +51,16 @@ def find_table(d, base, size):
     return None
 
 
+def last_msg_end(d, base, size, e):
+    """표 마지막 항목 뒤가 «xxx.msg» 이름이 아니라 대사면 그 대사의 끝(NUL 다음, 구역 기준)을, 아니면 None.
+    ★이런 구역은 표 N 항목이 모두 대사다(끝 항목이 따로 없다)."""
+    tail = d[base + e[-1]:base + size]
+    if b'.msg' in tail or not re.match(rb'[\x0c\x0a]?[\x81-\x9f\xe0-\xef][\x40-\xfc]', tail):
+        return None
+    z = tail.find(b'\x00')
+    return e[-1] + z + 1 if z >= 0 else None
+
+
 def esc(b):
     """대사 바이트 → 표기(가나·한자는 그대로, 제어는 {xx}, 줄바꿈 \n, CR 은 {0d})"""
     out, i = [], 0
@@ -97,6 +107,10 @@ if __name__ == '__main__':
         for i in range(len(e) - 1):
             b = d[o + e[i]:o + e[i + 1] - 1]          # 끝 NUL 만 뺀다({08} 대기는 대사 안에 남김)
             rows.append(('%s:%d:%d' % (p[1:4], si, i), len(b), esc(b)))
+        le = last_msg_end(d, o, s, e) if n > 1 else None
+        if le:                                          # 표 마지막 항목도 대사인 구역(189곳, 2026-09-26 실기 «やれやれ……»)
+            b = d[o + e[-1]:o + le - 1]
+            rows.append(('%s:%d:%d' % (p[1:4], si, len(e) - 1), len(b), esc(b)))
     os.makedirs(os.path.join(ROOT, 'work', 'text'), exist_ok=True)
     out = os.path.join(ROOT, 'work', 'text', 'scr.tsv')
     ko = {}                                             # 다시 뽑아도 번역(KO)은 (번호, JP) 가 같으면 살린다

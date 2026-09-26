@@ -7,15 +7,15 @@ r"""마법학원 루나! 한글 빌더 (1차: 8×8 반각 이름·장 제목 카
   (대사·KANJI.FNT 는 본문 번역이 오면 붙인다)
   python tools/build.py [--write [--install]]   (기본 = 예행 · --install = F: 트랙 1 교체)
 """
-import collections, hashlib, os, re, shutil, sys
+import struct, collections, glob, hashlib, os, re, shutil, sys
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 from iso9660 import Iso, SECTOR, DATA_OFF, DATA_LEN
 from cdrom_ecc import recalc_sector
-import scr, bdf, chapter_kr, kr16
+import scr, bdf, chapter_kr, kr16, ramlabel, options
 
 GALMURI7 = r'C:\claude\utils\font\Galmuri-v2.40.3\Galmuri7.bdf'
-ENCOUNTER_THIRD = False                          # 기본 = 원본 조우율. 배포 때 --enc tenth / --enc never 로 xdelta 3종(원본·1/10·없음) — 사용자 결정 2026-09-26
+DEFAULT_ENC, DEFAULT_EXP = '10', '3'              # 인수 없이 빌드하면 조우 1/10 · 경험치 ×3 (사용자 결정 2026-09-26). 배포 기본은 make_dist 가 --enc 1 --exp 1
 HALF_CODES = list(range(0x80, 0xFE))          # 한글 8×8 칸(0xFE·0xFF 는 피함)
 OUT = os.path.join(ROOT, 'work', 'out')
 INSTALL = r'F:\hospi\roms\ss roms\Mahou Gakuen Lunar! (Japan) (2M)\Mahou Gakuen Lunar! (Japan) (2M) (Track 01).bin'   # --install
@@ -178,41 +178,69 @@ def main():
         d[off:off + n] = b + bytes(n - len(b))
         n_ui += 1
     print('16×16 한글 %d자 · 대사 %d줄 · UI %d곳' % (len(sy16), n_scr, n_ui))
-    # --- 2.8) 조우율 1/3 (사용자 요청 2026-09-26) ----------------------------------
+    # --- 2.8) 조우 간격 (사용자 요청 2026-09-26) --------------------------------------------------
     #   /1 0x06018338‥: 카운터(0x06052844) = 난수(r4=6) + 5 → 걸음마다 −1, 0 이면 전투(0x0602909C). 평균 약 8걸음.
-    #   난수 범위 6→18, 더하기 5→15 → 15‥33걸음(평균 약 24) = 약 1/3.
-    #   실험: --enc always = 매 걸음 전투(카운터 = 난수(0)+0 = 0) · --enc never = 전투 없음(감소 −1 → 0, /1@69798 71FF→7100)
-    enc = sys.argv[sys.argv.index('--enc') + 1] if '--enc' in sys.argv else ('tenth' if ENCOUNTER_THIRD else None)
-    ENC = {'tenth': ((830, 'e406', 'e440'), (834, '7105', '7146')),     # 난수(0‥64)+70 ≈ 평균 102걸음(1/10 — 1/5 가 체감 1/3 이라 사용자 요청 2026-09-26)
-           'always': ((830, 'e406', 'e400'), (834, '7105', '7100')),
-           'never': ((69798, '71ff', '7100'),)}
+    #   --enc N(0 전투 없음 · 1 원본 · 2‥20 평균 8N걸음, tools/options.py) · tenth(예전 1/10 = 난수 64 + 70) · always(실험: 매 걸음)
+    enc = sys.argv[sys.argv.index('--enc') + 1] if '--enc' in sys.argv else DEFAULT_ENC
+    OLD = {'tenth': [('/1', 830, 'e406', 'e440'), ('/1', 834, '7105', '7146')],
+           'always': [('/1', 830, 'e406', 'e400'), ('/1', 834, '7105', '7100')], 'never': options.enc_patch(0)}
+    pats = []
     if enc:
-        d = file('/1')
-        for off, old, new in ENC[enc]:
-            if bytes(d[off:off + 2]) != bytes.fromhex(old):
-                err.append('/1@%d 조우 코드 원문 불일치' % off); continue
-            d[off:off + 2] = bytes.fromhex(new)
+        pats += OLD[enc] if enc in OLD else options.enc_patch(int(enc))
         print('조우 패치:', enc)
-    # --- 2.9) 경험치 배율 (--exp 2|3|4|5, 조우 감소판과 함께 — 사용자 제안 2026-09-26) -----------
-    #   /2(전투, 0x06018000) 0x06039902: r12 = 적 경험치 합 ÷ 받는 인원(0x0605AB44 = 범용 나눗셈) →
-    #   원래 «0 이면 1»(tst r12 / bf / mov #1,r12) 자리를 곱셈으로. r12 는 표시(«%dの経験値を得た»)와
-    #   실제 지급(0x0603609C, 파티원마다) 둘 다에 쓰인다. 9,999,999 상한 검사는 뒤에 그대로.
+    # --- 2.9) 경험치 배율 --exp N(1‥10) — tools/options.py -------------------------------------------
+    #   /2(전투, 0x06018000) 0x06039902: r12 = 적 경험치 합 ÷ 받는 인원 → «0 이면 1» 자리를 곱셈으로.
+    #   r12 는 표시(«%dの経験値を得た»)와 실제 지급(0x0603609C) 둘 다에 쓰인다. 9,999,999 상한 검사는 뒤에 그대로.
     #   ⛔치트 불가 — 같은 주소가 필드(/1)에선 실제 코드.
-    if '--exp' in sys.argv:
-        k = sys.argv[sys.argv.index('--exp') + 1]
-        EXP = {'2': '3ccc00090009', '3': '61c33c1c3c1c', '4': '4c0800090009', '5': '61c34c083c1c'}
-        d = file('/2')
-        if bytes(d[137476:137482]) != bytes.fromhex('2cc88b00ec01'):
-            err.append('/2@137476 경험치 코드 원문 불일치')
-        else:
-            d[137476:137482] = bytes.fromhex(EXP[k])
-            print('경험치 ×%s' % k)
+    k = int(sys.argv[sys.argv.index('--exp') + 1] if '--exp' in sys.argv else DEFAULT_EXP)
+    pats += options.exp_patch(k)
+    print('경험치 ×%d' % k)
+    for fp, off, old, new in pats:
+        d = file(fp)
+        n = len(old) // 2
+        if bytes(d[off:off + n]) != bytes.fromhex(old):
+            err.append('%s@%d 코드 원문 불일치' % (fp, off)); continue
+        d[off:off + n] = bytes.fromhex(new)
+    # --- 2.95) 전투 «%dの経験値を得た» 옮기기 ------------------------------------------------------
+    #   전투 창 상자 폭 = 문자열 바이트 수 → 반각 빈칸도 16px 로 그려 상자보다 글자가 길어진다 → 빈칸은 전각.
+    #   «의　경험치　획득»(16 B) 이 원래 자리(15 B)에 안 들어가 바로 앞 «THISISDUMMYSPACE»(16 B, 표 5번 = 안 쓰는 빈 칸)
+    #   자리에 쓰고(ui_extra), 메시지 표 13번(/2@294344) 포인터를 그리로 돌린다.
+    d = file('/2')
+    if struct.unpack_from('>I', d, 294344)[0] != 0x060325D4:
+        err.append('/2@294344 경험치 문구 포인터 원문 불일치')
+    else:
+        struct.pack_into('>I', d, 294344, 0x06032540)
     # --- 3) 장 제목 카드 ----------------------------------------------------
     chap, _, clen = chapter_kr.build()
     d = file('/CHAPTER.FLD')
     assert len(chap) == len(d)
     d[:] = chap
+    # --- 4) 저장 화면 «本体RAM»·«カートリッジRAM» 그림 (MISC.FLD·EFCT.FLD 두 벌) ------
+    for fp, si in ramlabel.SHEETS:
+        ramlabel.apply(file(fp), si)
 
+    # --- 5) 동영상(MSLM.FLD) — 오프닝 가사 구역 22 = work/kr/op22.cpk (tools/opening.py → opening_enc.py),
+    #        대사 자막 구역 NN = work/kr/mvNN.cpk (tools/moviesub.py NN --encode). 크기는 다음 구역 전까지.
+    movs = []
+    op = os.path.join(ROOT, 'work', 'kr', 'op22.cpk')
+    if not os.path.exists(op):
+        err.append('work/kr/op22.cpk 없음 — tools/opening.py, tools/opening_enc.py 먼저')
+    else:
+        movs.append((22, op))
+    for mp in sorted(glob.glob(os.path.join(ROOT, 'work', 'kr', 'mv[0-9][0-9].cpk'))):
+        movs.append((int(os.path.basename(mp)[2:4]), mp))
+    if movs:
+        d = file('/MSLM.FLD')
+        secs = scr.sections(bytes(d[:0x800]))
+        for si, mp in movs:
+            cpk = open(mp, 'rb').read()
+            o, s = secs[si]
+            room = secs[si + 1][0] - o
+            if bytes(d[o:o + 4]) != b'FILM' or len(cpk) > room:
+                err.append('MSLM.FLD 구역 %d 자리 불일치/초과 %d > %d' % (si, len(cpk), room)); continue
+            d[o:o + room] = cpk + bytes([0xFF]) * (room - len(cpk))
+            struct.pack_into('>I', d, si * 8 + 4, len(cpk))
+        print('동영상 %d편 교체: %s' % (len(movs), ' '.join('%02d' % si for si, _ in movs)))
     for e in err:
         print('⛔', e)
     if err:
