@@ -22,8 +22,15 @@ INSTALL = r'F:\hospi\roms\ss roms\Mahou Gakuen Lunar! (Japan) (2M)\Mahou Gakuen 
 
 
 def dlg_fix(ko):
-    """대사 KO 빌드 전 손질: 반각 !·? → 전각(규칙 문서 — 반각은 대사창에서 8×8 로 나올 수 있다). 반각 빈칸은 그대로(원문도 씀)."""
-    return ko.replace('!', '！').replace('?', '？')
+    """대사 KO 빌드 전 손질: 반각(1바이트) 글자 → 전각. ★대사창은 모든 글자를 2바이트로 읽는다 —
+    반각 빈칸 하나에 그 뒤 바이트 짝이 어긋나 글자가 빈칸으로 나오고 줄바꿈이 먹힌다(실기 2026-09-26 «뭐야 ··· 작년보다 ··· 줄었잖/아»).
+    제어 표기({xx}·\\n)는 그대로."""
+    out = []
+    for tok in re.split(r'(\{[0-9a-f]{2}\}|\\n)', ko):
+        if tok.startswith('{') or tok == '\\n':
+            out.append(tok); continue
+        out.append(''.join('　' if c == ' ' else chr(ord(c) + 0xFEE0) if '!' <= c <= '~' else c for c in tok))
+    return ''.join(out)
 
 
 def load_scr():
@@ -133,6 +140,29 @@ def main():
     kfnt = file('/KANJI.FNT')
     m16 = kr16.assign(sy16, bytes(kfnt), freq)
     kr16.put_font(kfnt, m16)
+    kr16.put_punct(kfnt)                           # 일본식 … 、 。 글리프 → 한국식
+    # 대사 글자 검사: 한글이 아닌 2바이트 글자는 KANJI.FNT 에 있어야 하고, 1바이트(ASCII)는 없어야 한다
+    fcodes = set(kr16.font_codes(bytes(kfnt))[0]) | {b'\x9e\x42', b'\x81\x40'}     # 曖(♥) · 전각 빈칸(글리프 표 맨 앞 칸)
+    jpline = {}
+    for ln in open(os.path.join(ROOT, 'work', 'text', 'scr.tsv'), encoding='utf-8'):
+        r = ln.rstrip('\n').split('\t')
+        if len(r) >= 3:
+            jpline[r[0]] = set(dlg_fix(r[2]))
+    bad = collections.Counter()
+    for k, v in scr_tr.items():
+        for ch in re.sub(r'\{[0-9a-f]{2}\}|\\n', '', v):
+            if ch in m16 or ch == '♥' or ch in jpline.get(k, ()):      # 원문 그 줄에도 있는 글자 = 원문과 같은 동작
+                continue
+            if ord(ch) < 0x80:
+                bad['반각 %r' % ch] += 1
+            else:
+                try:
+                    if ch.encode('cp932') not in fcodes:
+                        bad['글꼴에 없음 %r' % ch] += 1
+                except UnicodeEncodeError:
+                    bad['SJIS 에 없음 %r' % ch] += 1
+    for kk, n in bad.items():
+        err.append('대사 %s ×%d' % (kk, n))
     n_scr = kr16.rewrite_scripts(file, scr_tr, m16, err)
     # 실행 파일 전각 UI — ui.tsv(W) + ui_extra.tsv 자리에 제자리(KO 의 {09} 등 제어 바이트는 KO 에 적힌 그대로)
     n_ui = 0
