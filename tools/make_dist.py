@@ -14,7 +14,7 @@ import scr, options
 from iso9660 import Iso, SECTOR, DATA_OFF, DATA_LEN
 from cdrom_ecc import recalc_sector
 
-VER = 'v0.9'
+VER = 'v0.91'
 XDELTA = r'C:\claude\utils\xdelta.exe'
 BIN = os.path.basename(scr.TRACK1)
 ROM = BIN.replace(' (Track 01).bin', '')

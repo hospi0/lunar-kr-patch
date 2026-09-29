@@ -1,6 +1,6 @@
 # 마법학원 루나! (새턴 일본판) 한글화
 
-> **내려받기**: [Releases](https://github.com/hospi0/lunar-kr-patch/releases) 의 v0.9 zip — 트랙 1번 xdelta 하나 + `패치적용.bat`.
+> **내려받기**: [Releases](https://github.com/hospi0/lunar-kr-patch/releases) 의 v0.91 zip — 트랙 1번 xdelta 하나 + `패치적용.bat`.
 > 적용할 때 **조우 간격 배율(0~20, 0 = 랜덤 전투 없음)** 과 **경험치 배율(1~10)** 을 숫자로 고를 수 있습니다. 자세한 건 zip 안 readme.txt.
 
 Mahou Gakuen Lunar! (세가 새턴, 1997 GAME ARTS/角川書店) 한글 패치 작업 저장소.
