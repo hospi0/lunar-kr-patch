@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 r"""동영상 00‥21 대사 자막 — 1단계: 프레임 그리기
-  work/text/movie_sub.tsv (전체 시각 = 00‥21 을 빈틈없이 이어 붙였을 때, 사용자 제공 받아쓰기 시간표)
-  + my files/새 텍스트 문서.txt 의 시각 전부(«[音楽]» 등 포함 — 대사 끝 경계로만 씀)
-  → 영상별 시각으로 바꿔, 행마다 «\n» 조각을 차례로 한 자막씩 띄운다(글자 수 비례로 시간 나눔).
-    행 끝 = 다음 시각(경계) 과 «시작 + 글자 × 0.2 초 + 1.5 초» 중 이른 쪽.
+  ★2026-09-29 새 대본(my files/movie script.txt — 영상마다 0초부터)으로 전부 새로 번역:
+  work/text/movie_sub.tsv 열 = 영상 NN · 시작 · 끝 · 원문 · 번역(«\n» = 한 자막 안 줄바꿈) · 비고.
+  행마다 한 자막: 표의 [시작, 끝], 읽을 시간(글자×0.15초+0.8초, 최소 1.2초)보다 짧으면 다음 자막 앞까지 늘림. 부호 뒤 공백 1칸 삭제.
+  (옛 판 = 이어 붙인 전체 시각 + «\n» 조각 차례 표시 — work/moviesub_old_20260929.py)
   글씨: 나눔고딕 Bold 14px, 흰색 + 검은 1px 테두리, 화면 아래 가운데, 폭 넘치면 어절 단위 두 줄.
   → work/mvNN/kr/f####.png (그린 프레임만) + my files/그래픽/동영상자막_NN.png(확인용)
   python tools/moviesub.py 00 01
@@ -16,7 +16,7 @@ FONT = r'C:\claude\utils\font\nanum-gothic\NanumGothicBold.ttf'
 PX = 14
 FPS = 15
 TSV = os.path.join(ROOT, 'work', 'text', 'movie_sub.tsv')
-RAW = os.path.join(ROOT, 'my files', '새 텍스트 문서.txt')
+PUNCT_SP = re.compile(r'''([,.!?:;)\]}'"~、。，．！？：；）］｝」』】〉》”’…‥・·～〜♪♥]) (?! )''')    # 부호 뒤 공백 1칸 삭제(전프로젝트 규칙)
 
 
 def durations():
@@ -34,55 +34,34 @@ def durations():
 
 def secs(t):
     m, s = t.split(':')
-    return int(m) * 60 + int(s)
+    return int(m) * 60 + float(s)
 
 
 def rows():
-    res = []
+    """→ {영상 번호: [(시작 초, 끝 초, [줄…])]} — 2026-09-29 새 대본(영상마다 0초부터)"""
+    res = {}
     for ln in open(TSV, encoding='utf-8'):
         if ln.startswith('#') or not ln.strip():
             continue
         c = ln.rstrip('\n').split('\t')
-        res.append((secs(c[0]), c[2].split('\\n')))
+        lines = [PUNCT_SP.sub(r'\1', p.strip()) for p in c[4].split('\\n')]
+        res.setdefault(int(c[0]), []).append((secs(c[1]), secs(c[2]), lines))
     return res
 
 
-def bounds():
-    b = set()
-    for ln in open(RAW, encoding='utf-8'):
-        m = re.match(r'(\d+):(\d\d)', ln)
-        if m:
-            b.add(int(m.group(1)) * 60 + int(m.group(2)))
-    return sorted(b)
-
-
 def events():
-    """→ {영상: [(시작 프레임, 끝 프레임, 글)]}"""
+    """→ {영상: [(시작 프레임, 끝 프레임, [줄…])]} — 표의 [시작, 끝] 을 쓰되 읽을 시간(글자×0.15초+0.8초, 최소 1.2초)보다
+    짧으면 늘린다(다음 자막 앞·영상 끝까지)"""
     dur = durations()
-    start = np.concatenate([[0], np.cumsum(dur)])
-    bd = bounds()
-    starts = {t for t, _ in rows()}
     ev = {}
-    for t, parts in rows():
-        need = sum(len(p) for p in parts) * 0.2 + 1.5 * len(parts)
-        # 끝 경계: 다음 대사 시각은 그대로, «[音楽]» 같은 표시는 대사에 필요한 시간의 60% 뒤부터만
-        #   (받아쓰기가 대사 1초 뒤에 [音楽] 를 찍는 곳이 있다 — 18번 15:25→15:26)
-        nxt = min([x for x in bd if x > t and (x in starts or x - t >= need * 0.6)] + [start[-1]])
-        n = int(np.searchsorted(start, t, side='right') - 1)
-        if t + 0.5 >= start[n + 1] or start[n + 1] - t < need * 0.5:
-            # 시간표는 초 단위 → 다음 영상 시작 직전이거나, 남은 길이가 대사에 필요한 시간의 절반도 안 되면 다음 영상 처음으로
-            n += 1
-            t = float(start[n])
-        total = sum(len(p) for p in parts)
-        end = min(nxt - 0.2, t + total * 0.2 + 1.5 * len(parts), start[n + 1] - 0.1)
-        span = end - t
-        a = t
-        for p in parts:
-            d = span * len(p) / total
-            f0, f1 = int(round((a - start[n]) * FPS)), int(round((a + d - start[n]) * FPS)) - 1
-            assert f1 >= f0, (n, t, p)
-            ev.setdefault(n, []).append((f0 + 1, f1 + 1, p.strip()))     # 프레임 번호 1부터
-            a += d
+    for n, rs in rows().items():
+        for k, (s, e, lines) in enumerate(rs):
+            nxt = rs[k + 1][0] if k + 1 < len(rs) else dur[n]
+            need = max(sum(len(p) for p in lines) * 0.15 + 0.8, 1.2)
+            end = min(max(e, s + need), nxt - 0.07, dur[n] - 0.05)
+            f0, f1 = int(round(s * FPS)), int(round(end * FPS)) - 1
+            assert f1 >= f0, (n, s, lines)
+            ev.setdefault(n, []).append((f0 + 1, f1 + 1, lines))          # 프레임 번호 1부터
     return ev
 
 
@@ -114,7 +93,7 @@ def render(n, evs):
             p = os.path.join(dst, 'f%04d.png' % f)
             im = Image.open(p if os.path.exists(p) else os.path.join(src, 'f%04d.png' % f)).convert('RGB')
             W, H = im.size
-            lines = wrap(text, F, W - 12)
+            lines = [x for t in text for x in wrap(t, F, W - 12)]
             d = ImageDraw.Draw(im)
             y = H - 12 - (len(lines) - 1) * 17
             for ln in lines:
@@ -156,7 +135,7 @@ if __name__ == '__main__':
     for n in want:
         evs = ev.get(n, [])
         for f0, f1, t in evs:
-            print('%02d  %6.2f‥%6.2f초  %s' % (n, (f0 - 1) / FPS, f1 / FPS, t))
+            print('%02d  %6.2f‥%6.2f초  %s' % (n, (f0 - 1) / FPS, f1 / FPS, ' / '.join(t)))
         k = render(n, evs)
         print('%02d 그린 프레임 %d' % (n, k))
         if '--encode' in sys.argv:              # 2단계: 자막 든 키 구간만 다시 굽기 → work/kr/mvNN.cpk (build.py 가 MSLM.FLD 구역 NN 에)
