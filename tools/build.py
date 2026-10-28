@@ -16,7 +16,9 @@ import scr, bdf, chapter_kr, kr16, ramlabel, options
 
 GALMURI7 = r'C:\claude\utils\font\Galmuri-v2.40.3\Galmuri7.bdf'
 DEFAULT_ENC, DEFAULT_EXP = '10', '3'              # 인수 없이 빌드하면 조우 1/10 · 경험치 ×3 (사용자 결정 2026-09-26). 배포 기본은 make_dist 가 --enc 1 --exp 1
-HALF_CODES = list(range(0x80, 0xFE))          # 한글 8×8 칸(0xFE·0xFF 는 피함)
+# 한글 8×8 칸: 0x80‥0xFD 에서 0xDE·0xDF(ﾞﾟ — /1 0x060325D0 이 앞 글자 위에 겹쳐 찍음 → 징·찌 깨짐, 2026-10-28 제보) 빼고,
+# 원문·번역 어디에도 안 나오는 영소문자 칸을 더함(/2 히라가나 섞인 마법 이름 13곳으로 음절 132). 0xFE·0xFF 는 피함.
+HALF_CODES = [c for c in range(0x80, 0xFE) if c not in (0xDE, 0xDF)] + [ord(c) for c in 'jkqxzwyb']
 OUT = os.path.join(ROOT, 'work', 'out')
 INSTALL = r'F:\hospi\roms\ss roms\Mahou Gakuen Lunar! (Japan) (2M)\Mahou Gakuen Lunar! (Japan) (2M) (Track 01).bin'   # --install
 

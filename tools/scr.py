@@ -11,7 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 from iso9660 import Iso
 
-TRACK1 = r'C:\claude\roms\ss\완료\Mahou Gakuen Lunar! (Japan) (2M)\Mahou Gakuen Lunar! (Japan) (2M) (Track 01).bin'
+TRACK1 = r'D:\hospi\My Documents\한글패치\SS\ss\Mahou Gakuen Lunar! (Japan) (2M)\Mahou Gakuen Lunar! (Japan) (2M) (Track 01).bin'   # 2026-10-28 롬 위치 이동(읽기만, md5 7235eb08…)
 FILES = ['/S%02d.FLD' % i for i in range(13)]
 
 
